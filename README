@@ -1,0 +1,448 @@
+TABLE OF CONTENTS                                                    LINE NUMBER
+    1       Introduction                                                        
+    2       Installation guide                                                  
+    2.1         Software dependencies                                           
+    2.2         Required files                                                  
+    3       How to run                                                          
+    4       Interpreting results                                                
+    5       Appendices                                                          
+    5.1         File listing                                                    
+    5.2         References                                                      
+
+
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║   § 1     Introduction                                                       ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+This is a Python script for the automatic comparative quality assessment of
+eukaryotic genome annotations. It accepts as input a GTF/GFF file containing a
+genome annotation to be assessed, and compares it to a reference annotation
+prepared in advance.
+
+The main output of the script is a set of statistics which may be interpreted to
+determine the quality of the annotation.
+
+
+In addition to the statistics, the script also creates a subset of the input
+GTF/GFF file, such that it only includes features at the same genomic regions as
+the ones in the reference annotation. The purpose of this subset file is to
+allow manually comparing the input annotation with the reference annotation,
+using a GUI-based sequence viewer (e.g. Geneious).
+
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║   § 2     Installation guide                                                 ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+To begin installation, clone this repository to the directory from which you'd
+like to run the script:
+$ git clone https://github.com/macbiel/annotqc annotqc
+$ cd annotqc
+
+Next, move on to install the software dependencies and prepare the required
+files.
+
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│   § 2.1   Software dependencies                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+The script's dependencies are as follows:
+ - Python >= 3.10
+ - pandas >= 2.2.3
+ - Biopython >= 1.85
+ - NCBI BLAST >= 2.16.0
+ - AEGeAn Toolkit >= 0.16.0
+ - bedtools >= 2.25.0
+ - BUSCO >= 5.8.3
+
+
+The lowest-effort way of getting all of these dependencies installed is to use
+Conda. The enclosed environment.yaml can be used to install all of those
+dependencies with Conda.
+
+You may create a new environment for the purpose of running the script:
+$ conda env create -f environment.yaml
+
+This will create an environment named "annotqc", which you'll need to activate
+to run the script.
+
+Alternatively, install the requisite packages as part of the active environment:
+$ conda install -f environment.yaml 
+
+environment.yaml is not required for the execution of the script. You may delete
+it upon installing all the prerequisite packages.
+
+
+Of course, Conda is only one way of installing the dependencies. If your
+system-wide package manager provides all of the requisite software, you may use
+it to install the appropriate packages. Additionally, Biopython and pandas are
+both available through PyPI.
+
+
+Please see §5.2 for references for each dependency.
+
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│   § 2.2   Required files                                                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+You must provide a reference annotation, which serves as a point of comparison
+for the script. A reference annotation should include two files:
+
+
+- annot.gff: 
+        A GFF/GTF file containing the reference annotation. It should contain
+        features of three different types: "gene", "exon" and "intron" (all
+        feature types are case-sensitive). Features of other types are not taken
+        into consideration by the script.
+        
+        Aside from the feature type, the only other fields of importance for the
+        purposes of running the script are ones pertaining to a feature's
+        positions in the genome:
+         - sequence name (field #1)
+         - start position (field #4)
+         - end position (field #5)
+         - strand (field #7)
+        
+        The remaining fields are ignored by the script, and so their contents
+        can just be a single period (".") to dummy them out. This includes the
+        attribute field. This also means that the features do not need to
+        hierarchized using the "Parent" attribute.
+        
+        As mentioned above, this file may be either in the GTF or GFF format
+        (the ways in which these formats differ do not matter to the script).
+        Regardless of the format, however, the file must be named "annot.gff",
+        with "gff" as the extension.
+
+- genome.fa:
+        A FASTA file containing sequences referenced in the sequence name field
+        of annot.gff, as well as the GTF/GFF file used as input.
+        
+        In other words, both annot.gff and the input GTF/GFF file are to contain
+        annotations for this specific FASTA file.
+
+
+The above two files should be put inside a subdirectory which itself should be
+inside of the refs/ directory. The subdirectory can bear any name, serving as
+the name for the annotation, and refs/ can contain any number of subdirectories,
+with each subdirectory containing its own genome.fa and annot.gff.
+
+The purpose of this directory structure is to allow the user to deal with
+multiple disparate reference annotations, e.g. having a different annotation
+for each researched species.
+
+
+The refs/ directory might therefore look like this:
+
+refs/
+│
+├───    human/
+│       │
+│       ├───    annot.gff
+│       │
+│       └───    genome.fa
+│
+├───    mouse/
+│       │
+│       ├───    annot.gff
+│       │
+│       └───    genome.fa
+│
+└───    fly/
+        │
+        ├───    annot.gff
+        │
+        └───    genome.fa
+
+The above tree describes the three species "human", "mouse", and "fly", each
+with its own reference annotation.
+
+
+In addition to annot.gff and genome.fa, the script will automatically generate
+exon.fa and intron.fa inside of the reference annotation subdirectory. These
+files may be safely removed, but doing so will cause the script to regenerate
+them the next time it is run, which will slightly extend its runtime.
+
+
+The enclosed refs/ directory contains the example/ subdirectory, which contains
+an example reference annotation, intended to act as a point of reference for
+providing your own reference annotation. In particular, you may wish to examine 
+refs/example/annot.gff, which has been commented for your perusal.
+
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║   § 3     How to run                                                         ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+In the simplest case, you may run the script as follows:
+$ ./run_qc.py GFF FASTA SPECIES
+where each positional argument is as follows:
+
+ - GFF:
+        Path to the GTF/GFF file containing the annotation to be assessed.
+        Despite the argument's name being "GFF", the annotation may also be in
+        the GTF format. As mentioned in §2.2, this annotation must pertain to
+        the genome.fa file from the appropriate reference annotation.
+
+ - FASTA:
+        Path to FASTA file containing sequences of proteins, as according to the
+        input annotation.
+
+ - SPECIES:
+        Name of a subdirectory within refs/, that is, the name of a reference
+        annotation. The name for this argument is "SPECIES", but of course, your
+        reference annotations may be differentiated on any basis. This argument
+        must be passed even if refs/ contains only one reference annotation.
+
+
+In addition, there is a number of flags you may use to customize the behavior of
+the script:
+ -C, --CDS:
+        By default, the script examines the exon features in the input
+        annotation. However, some programs for gene prediction do not include
+        exons in their outputs, instead opting to provide CDS features. If the
+        input GTF/GFF file includes CDS features, but not exons, supply
+        this flag.
+        
+        Note that treating CDSs as exons applies only to the input annotation.
+        Passing this flag will *not* cause the CDS features from the reference
+        annotation to be treated as exons.
+
+ -n, --name NAME
+        Allows the user to supply a custom name for the input annotation. The
+        results pertaining the given input will be reported under this name.
+        
+        If the user does not pass a custom name, it is instead autogenerated,
+        based on the path to the input GTF/GFF file.
+
+ -b, --busco LINEAGE
+        The name of the BUSCO lineage to be used during completion assessment by
+        BUSCO. By default, this is "eukaryota_odb10"; you may wish to use a
+        different lineage.
+
+        Run 'busco --list-datasets' for the list of valid values of LINEAGE.
+
+ -o, --outfile FILE
+        By default, the script will write the computed statistics to stats.tsv.
+        To have the script write statistics to a different file, supply the path
+        to that file with this flag.
+
+ -O, --outdir DIR
+        By default, the script will put the generated GTF/GFF file in gff_out/.
+        To have the script write the generated GTF/GFF file to a different
+        directory, supply the path to that directory with this flag.
+
+ -h, --help
+        Show help message.
+
+
+Assuming all the software dependencies are installed, and all the relevant files
+(input & reference annotation) are present, the script will calculate the stats
+and save them to stats.tsv (or whatever other path was passed with the --outfile
+flag), and generate a GTF/GFF file in GFF_out/ (or whatever other path was
+passed with the --outdir flag).
+
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║   § 4     Interpreting results                                               ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+This section describes each statistic computed by the script and how to
+interpret them.
+
+
+Each numeric statistic is annotated with one of the following glyphs:
+ - ↑, meaning that a high-quality annotation maximizes this statistic
+ - ↓, meaning that a high-quality annotation minimizes this statistic
+ - *, meaning that a high-quality annotation has some non-obvious optimum
+      for this statistic
+
+
+The first 7 statistics are simple statistics calculated based solely on the
+input GTF/GFF file:
+
+ - gene_cnt         *
+        The number of genes in the input annotation.
+ - trans_ratio      *
+        The average number of transcripts each gene has.
+ - exon_ratio       *
+        The average number of exons (or CDSs) each gene has.
+ - intron_ratio     *
+        The average number of introns each gene has.
+ - gene_len         *
+        The average length of a gene.
+ - exon_len         *
+        The average length of an exon (or CDS).
+ - intron_len       *
+        The average length of an intron.
+
+These statistics chiefly exist to be compared to existing data, e.g. if the
+approximate number of genes in a given genome is known. As such, the optimal
+value depends on the exact genome you're annotating.
+
+
+The next 4 statistics are calculated by BUSCO:
+
+ - busco_s          ↑
+        Percentage of BUSCO genes present in the annotation in their entirety,
+        as a single copy.
+ - busco_d          ↑
+        Percentage of BUSCO genes present in the annotation in their entirety,
+        as multiple copies.
+ - busco_f          *
+         Percentage of BUSCO genes present in the annotation as fragments.
+         A high-quality annotation will maximize this statistic at the cost of
+         busco_m, but not busco_s or busco_d.
+ - busco_m          ↓
+        Percentage of BUSCO genes absent from the annotation.
+
+As percentages, all four statistics range from 0 to 100. See the BUSCO user
+guide for more information on these statistics.
+
+
+The next 10 statistics are calculated based on BLAST results, using the input
+annotation's exon (or CDS) and intron sequences as the database, and the
+reference annotation's exon and intron sequences as queries:
+
+ - exon_hits        ↑
+        Percentage of query exons that got a hit in the database.
+ - intron_hits      ↑
+        Percentage of query introns that got a hit in the database.
+ - exon_eval        ↓
+        Median E-value for exon hits.
+ - intron_eval      ↓
+        Median E-value for intron hits.
+ - exon_pident      ↑
+        Average percent of identity for exon hits.
+ - intron_pident    ↑
+        Average percent of identity for intron hits.
+ - exon_qcov        ↑
+        What portion of the query exon actually aligned, averaged across all
+        exon hits, i.e. average query coverage for exon hits.
+ - intron_qcov      ↑
+        What portion of the query intron actually aligned, averaged across all
+        intron hits, i.e. average query coverage for intron hits.
+ - exon_scov        ↑
+        What portion of the database exon (or CDS) actually aligned, averaged
+        across all exon hits, i.e. average subject coverage for exon hits.
+ - intron_scov      ↑
+        What portion of the query intron actually aligned, averaged across all
+        intron hits, i.e. average subject coverage for intron hits.
+
+All of these statistics are percentages and range from 0 to 100, except for 
+exon_eval and intron_eval, which range from 0 to 1, with 1 being the threshold
+E-value used by the script.
+
+
+The next statistic is calculated based on the generated GTF/GFF file:
+
+ - gene_frag        *
+        Number of genes from the input annotation that have an overlap with a
+        gene from the reference annotation, averaged across all genes from the
+        reference annotation.
+
+A high-quality annotation should have this statistic approach 1.Values below 1
+suggest that the annotation is incomplete, as it implies that genes present in
+the reference annotation are absent from the input annotation. Conversely,
+values above 1 imply that the input annotation is either ambiguous (i.e. there
+are multiple genes within the same genomic region), or fragmented (i.e. what is
+one gene in the reference annotation is multiple genes in the input annotation).
+
+
+The remaining 5 statistics are calculated based on the sequences of exons/CDSs
+and introns from the input and reference annotations:
+ - exon_gccont      *
+        The average GC content of exons (or CDSs) from the input annotation.
+ - intron_gccont    *
+        The average GC content of introns from the input annotation. One would
+        generally expect this statistic to be lower than exon_gccont.
+ - exon_matches     ↑
+        The percentage of exons from the reference annotation which are also
+        present in the input annotation. This matching is done verbatim, i.e.
+        the exons must be the same length and have identical sequences to count.
+ - intron_matches   ↑
+        The percentage of introns from the reference annotation which are also
+        present in the input annotation.
+ - splice_sites     *
+        The distribution of splice sites in the input annotation's introns,
+        with the splice sites sorted by decreasing frequency.
+
+All of these statistics are percentages and range from 0 to 100, except for 
+splice sites, which is a descriptive statistic. Like the first 7 statistics,
+exon_gccont, intron_gccont and splice_sites should be compared to existing data
+to determine whether or not they are within the range one would expect for the
+given genome.
+
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║   § 5     Appendices                                                         ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+This section contains listing serving as reference for the reader.
+
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│   § 5.1   File listing                                                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+Below is a listing of the files in this repository:
+
+annotqc/
+│
+├───    README
+│           This document.
+│
+├───    environment.yaml
+│           YAML file describing a Conda environment for running the script.
+│           See §2.1.
+│
+├───    run_qc.py
+│           The main body of the script.
+│
+├───    file_ledger.py, qc_func.py
+│           Modules imported by run_qc.py.
+│
+└───    refs/
+        │   Directory for reference annotations.
+        │
+        └───    example/
+                │   An example reference annotation.
+                │
+                ├───    genome.fa
+                │           The FASTA file for the example reference annotation.
+                │
+                └───    annot.fa
+                            The GFF file for the example reference annotation.
+                            Commented for perusal.
+
+
+╭──────────────────────────────────────────────────────────────────────────────╮
+│   § 5.2   References                                                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+Below are references to various software mentioned in this document:
+
+ - Python:
+        https://www.python.org/
+
+ - Geneious:
+        https://www.geneious.com/
+
+ - pandas:
+        https://pandas.pydata.org/
+
+ - Biopython:
+        https://biopython.org/
+
+ - NCBI BLAST:
+        https://blast.ncbi.nlm.nih.gov/doc/blast-help/downloadblastdata.html
+
+ - AEGeAn Toolkit:
+        https://brendelgroup.github.io/AEGeAn/
+
+ - bedtools:
+        https://bedtools.readthedocs.io/en/latest/index.html
+
+ - BUSCO:
+        https://busco.ezlab.org/
+
+ - Conda:
+        https://conda.io/
