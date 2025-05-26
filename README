@@ -175,7 +175,7 @@ refs/example/annot.gff, which has been commented for your perusal.
 ║   § 3     How to run                                                         ║
 ╚══════════════════════════════════════════════════════════════════════════════╝
 In the simplest case, you may run the script as follows:
-$ ./run_qc.py GFF FASTA SPECIES
+$ ./run_qc.py GFF SPECIES [FASTA]
 where each positional argument is as follows:
 
  - GFF:
@@ -184,15 +184,16 @@ where each positional argument is as follows:
         the GTF format. As mentioned in §2.2, this annotation must pertain to
         the genome.fa file from the appropriate reference annotation.
 
- - FASTA:
-        Path to FASTA file containing sequences of proteins, as according to the
-        input annotation.
-
  - SPECIES:
         Name of a subdirectory within refs/, that is, the name of a reference
         annotation. The name for this argument is "SPECIES", but of course, your
         reference annotations may be differentiated on any basis. This argument
         must be passed even if refs/ contains only one reference annotation.
+
+ - FASTA:
+        Path to an optional FASTA file containing sequences of proteins, as
+        according to the input annotation. The sequences in this file will be
+        used by BUSCO for completeness assessment.
 
 
 In addition, there is a number of flags you may use to customize the behavior of
@@ -218,7 +219,7 @@ the script:
  -b, --busco LINEAGE
         The name of the BUSCO lineage to be used during completion assessment by
         BUSCO. By default, this is "eukaryota_odb10"; you may wish to use a
-        different lineage.
+        different lineage. Only relevant if FASTA was passed.
 
         Run 'busco --list-datasets' for the list of valid values of LINEAGE.
 
@@ -298,6 +299,9 @@ The next 4 statistics are calculated by BUSCO:
 
 As percentages, all four statistics range from 0 to 100. See the BUSCO user
 guide for more information on these statistics.
+
+If the FASTA argument was not passed to the script, these statistics will not
+be included.
 
 
 The next 10 statistics are calculated based on BLAST results, using the input

@@ -47,14 +47,16 @@ from typing import *
 ################################################################################
 
 #Check that each dependency is in PATH
-map(require_exec, [
+dependencies: list[str] = [
 		"xtractore",
 		"intersectBed",
 		"busco",
 		"makeblastdb",
 		"blastn"
-	])
+	]
 
+for dep in dependencies:
+	require_exec(dep)
 
 
 ################################################################################
@@ -101,13 +103,13 @@ args = ArgumentParser()
 args.add_argument("gff", metavar="GFF",
 	help = "GTF/GFF file with annotation")
 
-#FASTA with protein sequences
-args.add_argument("fasta", metavar="FASTA",
-	help = "FASTA file with protein sequences")
-
 #Species name
 args.add_argument("species", metavar="SPECIES",
 	help ="Name of species whose reference data to use")
+
+#FASTA with protein sequences
+args.add_argument("fasta", metavar="FASTA", nargs='?',
+	help = "FASTA file with protein sequences")
 
 args.epilog = "Valid values for SPECIES are: " + ", ".join(species)
 
@@ -143,7 +145,8 @@ args = args.parse_args()
 
 #Input GFF & FASTA
 paths.annot = (args.gff,   PathReq.IS_FILE)
-paths.prot  = (args.fasta, PathReq.IS_FILE)
+if args.fasta:
+	paths.prot  = (args.fasta, PathReq.IS_FILE)
 
 
 #Species
@@ -274,23 +277,32 @@ ref_stats["intron_cnt"] = gff_ftcnt(ref_annot, "intron")
 ################################################################################
 #	BUSCO
 ################################################################################
-eprint("Running BUSCO")
+#Determine whether BUSCO should be run
+if args.fasta:
+	eprint("Running BUSCO")
+	
+	
+	#Directory for holding BUSCO results
+	paths.busco_d = paths.tmp_d / "busco"
+	#Run BUSCO
+	run_busco(paths.prot, args.busco, paths.busco_d)
+	
+	#Deserialize BUSCO results
+	busco: dict = get_busco(paths.busco_d)
+	
+	
+	#Add BUSCO percentages to statistics
+	stats["busco_s"] = busco["results"]["Single copy percentage"]
+	stats["busco_d"] = busco["results"]["Multi copy percentage"]
+	stats["busco_f"] = busco["results"]["Fragmented percentage"]
+	stats["busco_m"] = busco["results"]["Missing percentage"]
 
-
-#Directory for holding BUSCO results
-paths.busco_d = paths.tmp_d / "busco"
-#Run BUSCO
-run_busco(paths.prot, args.busco, paths.busco_d)
-
-#Deserialize BUSCO results
-busco: dict = get_busco(paths.busco_d)
-
-
-#Add BUSCO percentages to statistics
-stats["busco_s"] = busco["results"]["Single copy percentage"]
-stats["busco_d"] = busco["results"]["Multi copy percentage"]
-stats["busco_f"] = busco["results"]["Fragmented percentage"]
-stats["busco_m"] = busco["results"]["Missing percentage"]
+else:
+	#If protein FASTA was not passed, push dummy values as BUSCO stats
+	stats["busco_s"] = ""
+	stats["busco_d"] = ""
+	stats["busco_f"] = ""
+	stats["busco_m"] = ""
 
 
 ################################################################################
